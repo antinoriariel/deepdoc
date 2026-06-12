@@ -25,6 +25,11 @@ def setup_logging(verbose: bool = False) -> None:
     )
 
 
+IMAGE_EXTENSIONS: frozenset[str] = frozenset(
+    {".png", ".jpg", ".jpeg", ".webp", ".tiff", ".tif", ".bmp", ".gif"}
+)
+
+
 def detect_file_type(path: Path) -> str:
     """Detecta el tipo de archivo por extensión; lanza ValueError si no es soportado."""
     suffix = path.suffix.lower()
@@ -32,6 +37,8 @@ def detect_file_type(path: Path) -> str:
         return "pdf"
     if suffix in (".pptx", ".ppt"):
         return "pptx"
+    if suffix in IMAGE_EXTENSIONS:
+        return "image"
     raise ValueError(f"Tipo de archivo no soportado: {suffix!r}")
 
 
@@ -48,9 +55,11 @@ def get_output_path(input_path: Path, output_dir: Path) -> Path:
 
 
 def collect_files(root: Path, recursive: bool = False) -> list[Path]:
-    """Devuelve todos los PDF y PPTX dentro de un directorio, sin duplicados."""
+    """Devuelve todos los PDF, PPTX e imágenes dentro de un directorio, sin duplicados."""
+    image_globs = (f"*{ext}" for ext in IMAGE_EXTENSIONS)
+    exts = ("*.pdf", "*.pptx", "*.ppt", *image_globs)
     files: list[Path] = []
-    for ext in ("*.pdf", "*.pptx", "*.ppt"):
+    for ext in exts:
         pattern = f"**/{ext}" if recursive else ext
         files.extend(root.glob(pattern))
     return sorted(set(files))

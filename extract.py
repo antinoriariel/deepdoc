@@ -33,6 +33,7 @@ def _process_file(
     from loguru import logger
 
     from src.image_extractor import ImageExtractor
+    from src.image_processor import ImageProcessor
     from src.markdown_formatter import MarkdownFormatter
     from src.markitdown_processor import MarkItDownProcessor
     from src.ocr_engine import get_engine
@@ -62,8 +63,9 @@ def _process_file(
         markitdown_used = False
         blocks: list[str] = []
 
-        # Etapa 1 — intento rápido con MarkItDown, sin tocar los motores OCR.
-        if use_markitdown:
+        # Etapa 1 — intento rápido con MarkItDown (solo para PDF/PPTX; las imágenes
+        # requieren visión LLM que no está configurada aquí).
+        if use_markitdown and file_type != "image":
             try:
                 quick = MarkItDownProcessor().convert(input_path)
             except ImportError as exc:
@@ -82,14 +84,19 @@ def _process_file(
             )
             if file_type == "pdf":
                 proc = PDFProcessor(ocr_engine, image_extractor, extract_images, lang)
-            else:
+            elif file_type == "pptx":
                 proc = PPTXProcessor(ocr_engine, image_extractor, extract_images, lang)
+            else:
+                proc = ImageProcessor(ocr_engine, image_extractor, extract_images, lang)
             blocks = proc.process(input_path)
             result["engine"] = ocr_name
 
-        result["pages"] = (
-            count_pdf_pages(input_path) if file_type == "pdf" else count_pptx_slides(input_path)
-        )
+        if file_type == "pdf":
+            result["pages"] = count_pdf_pages(input_path)
+        elif file_type == "pptx":
+            result["pages"] = count_pptx_slides(input_path)
+        else:
+            result["pages"] = 1
 
         # MarkItDown no referencia imágenes embebidas: extraerlas aparte si se pidieron.
         if markitdown_used and extract_images:
@@ -128,7 +135,7 @@ def _process_file(
 
 @app.command()
 def main(
-    input_path: Path = typer.Argument(..., help="Archivo PDF, PPTX o carpeta a procesar"),
+    input_path: Path = typer.Argument(..., help="Archivo PDF, PPTX, imagen (PNG/JPG/WEBP/…) o carpeta a procesar"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Carpeta de salida (default: output/)"),
     lang: str = typer.Option("es,en", "--lang", "-l", help="Idiomas OCR separados por coma (ISO 639-1)"),
     ocr: str = typer.Option("tesseract", "--ocr", help="Motor OCR: paddle | surya | tesseract"),
@@ -155,7 +162,7 @@ def main(
         raise typer.Exit(1)
 
     if not files:
-        console.print("[yellow]No se encontraron archivos PDF o PPTX.[/yellow]")
+        console.print("[yellow]No se encontraron archivos PDF, PPTX ni imágenes.[/yellow]")
         raise typer.Exit(0)
 
     output_dir = output if output else Path("output")
