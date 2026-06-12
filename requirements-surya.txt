@@ -1,0 +1,4 @@
+# Surya OCR — requiere Python >=3.9, <=3.12
+# Instalar con:
+#   pip install -r requirements-surya.txt
+surya-ocr>=0.6.0

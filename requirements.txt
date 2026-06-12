@@ -9,11 +9,12 @@ pdf2image>=1.17.0
 # PPTX
 python-pptx>=1.0.0
 
-# OCR
-paddleocr>=2.8.0
-paddlepaddle>=2.6.0
-surya-ocr>=0.6.0
+# OCR — motor base (funciona en cualquier Python)
 pytesseract>=0.3.13
+
+# OCR avanzado — ver requirements-paddle.txt y requirements-surya.txt
+# PaddleOCR requiere Python <=3.11 y paddlepaddle (instalar por separado)
+# Surya OCR requiere Python <=3.12 (instalar por separado)
 
 # Imágenes
 pillow>=10.0.0
