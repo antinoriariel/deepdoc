@@ -2,7 +2,19 @@
 from abc import ABC, abstractmethod
 
 from PIL import Image
-from loguru import logger
+
+# La CLI recibe códigos ISO 639-1 ("es"); Tesseract usa ISO 639-3 ("spa").
+# Los códigos no mapeados se pasan tal cual, permitiendo usar 639-3 directo.
+_TESSERACT_LANG_MAP: dict[str, str] = {
+    "es": "spa",
+    "en": "eng",
+    "fr": "fra",
+    "de": "deu",
+    "it": "ita",
+    "pt": "por",
+    "ca": "cat",
+    "nl": "nld",
+}
 
 
 class OCREngine(ABC):
@@ -78,9 +90,9 @@ class TesseractEngine(OCREngine):
             raise ImportError(f"pytesseract no está instalado: {exc}") from exc
 
     def extract_text(self, image: Image.Image, lang: list[str]) -> str:
-        """Extrae texto con Tesseract."""
-        lang_str = "+".join(lang)
-        return self._pytesseract.image_to_string(image, lang=lang_str)
+        """Extrae texto con Tesseract; acepta códigos ISO 639-1 o 639-3."""
+        codes = [_TESSERACT_LANG_MAP.get(code.lower(), code) for code in lang]
+        return self._pytesseract.image_to_string(image, lang="+".join(codes))
 
 
 _ENGINE_REGISTRY: dict[str, type[OCREngine]] = {
