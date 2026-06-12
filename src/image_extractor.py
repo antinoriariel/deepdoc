@@ -8,14 +8,17 @@ from loguru import logger
 
 
 class ImageExtractor:
-    def __init__(self, output_dir: Path) -> None:
+    def __init__(self, output_dir: Path, prefix: str = "") -> None:
+        """`prefix` evita colisiones cuando varios documentos de un lote
+        comparten el mismo directorio output/images/."""
         self.images_dir = output_dir / "images"
         self.images_dir.mkdir(parents=True, exist_ok=True)
+        self._prefix = f"{prefix}_" if prefix else ""
         self._counter = 0
 
     def _next_path(self) -> Path:
         self._counter += 1
-        return self.images_dir / f"image_{self._counter:03d}.png"
+        return self.images_dir / f"{self._prefix}image_{self._counter:03d}.png"
 
     def save_image(self, image: Image.Image) -> Optional[Path]:
         """Guarda una imagen en el directorio de salida y retorna su ruta."""
