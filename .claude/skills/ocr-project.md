@@ -7,10 +7,10 @@ description: >
 
 ## Stack técnico
 
-- Python 3.11+, Typer, Rich, loguru
-- MarkItDown (Microsoft) como pipeline rápido
-- PaddleOCR / Surya / Tesseract como motores OCR (patrón Strategy)
-- PyMuPDF para PDF con texto, pdf2image para PDF escaneados
+- Python 3.10–3.14, Typer, Rich, loguru
+- MarkItDown (Microsoft, extras pdf/pptx) como pipeline rápido
+- Tesseract (default) / PaddleOCR / Surya como motores OCR (patrón Strategy)
+- PyMuPDF para PDF: texto embebido Y rasterización de escaneados (sin Poppler)
 - python-pptx para PPTX
 - pytest para tests
 
@@ -27,8 +27,11 @@ description: >
 
 1. Intentar MarkItDown → si suficiente (`len > 200` y `newlines > 5`), retornar
 2. PDF con texto: PyMuPDF → bloques ordenados por coordenadas (y redondeada / x)
-3. PDF escaneado: pdf2image → OCR engine configurado
+3. PDF escaneado: PyMuPDF `get_pixmap(dpi=300)` página a página (generador) → OCR engine
 4. PPTX: python-pptx → shapes ordenados top/left → OCR solo sobre imágenes embebidas
+
+El motor OCR se instancia de forma diferida en extract.py (solo si hay fallback).
+TesseractEngine mapea ISO 639-1 → 639-3 (`es` → `spa`) automáticamente.
 
 ## Estilo esperado del Markdown generado
 

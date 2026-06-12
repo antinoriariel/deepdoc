@@ -22,10 +22,22 @@ MarkItDown (Microsoft) + OCR avanzado (PaddleOCR / Surya / Tesseract).
 ```
 Entrada → MarkItDown (intento rápido) → ¿OK? → Markdown
                                            ↓ NO
-                              PDF con texto? → PyMuPDF → Markdown
-                              PDF escaneado? → pdf2image → OCR → Markdown
+                              PDF con texto? → PyMuPDF (bloques) → Markdown
+                              PDF escaneado? → PyMuPDF (render 300 DPI) → OCR → Markdown
                               PPTX?          → python-pptx → OCR sobre imágenes → Markdown
 ```
+
+El motor OCR se construye de forma diferida (solo si MarkItDown no alcanza).
+
+## Decisiones de dependencias
+
+- `markitdown[pdf,pptx]` — NUNCA usar el extra `[all]`: arrastra
+  youtube-transcript-api y onnxruntime<=1.20.1, sin wheels para Python 3.13+
+- Sin Poppler: los escaneados se rasterizan con `fitz.get_pixmap(dpi=300)`
+- Sin Ghostscript: camelot>=1.0 usa pypdfium2 (y ya no existe el extra [cv])
+- Paddle/Surya van en requirements-paddle.txt / requirements-surya.txt
+  (no instalan en Python 3.12+/3.13+ respectivamente)
+- Motor default: `tesseract` (único instalable en cualquier Python)
 
 ## Convenciones del código
 
