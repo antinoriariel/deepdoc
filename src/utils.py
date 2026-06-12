@@ -48,10 +48,30 @@ def get_output_path(input_path: Path, output_dir: Path) -> Path:
 
 
 def collect_files(root: Path, recursive: bool = False) -> list[Path]:
-    """Devuelve todos los PDF y PPTX dentro de un directorio."""
-    glob = "**/*" if recursive else "*"
+    """Devuelve todos los PDF y PPTX dentro de un directorio, sin duplicados."""
     files: list[Path] = []
     for ext in ("*.pdf", "*.pptx", "*.ppt"):
         pattern = f"**/{ext}" if recursive else ext
         files.extend(root.glob(pattern))
     return sorted(set(files))
+
+
+def count_pdf_pages(path: Path) -> int:
+    """Número de páginas de un PDF; 0 si el archivo no puede abrirse."""
+    try:
+        import fitz
+
+        with fitz.open(str(path)) as doc:
+            return len(doc)
+    except Exception:
+        return 0
+
+
+def count_pptx_slides(path: Path) -> int:
+    """Número de diapositivas de un PPTX; 0 si el archivo no puede abrirse."""
+    try:
+        from pptx import Presentation
+
+        return len(Presentation(str(path)).slides)
+    except Exception:
+        return 0

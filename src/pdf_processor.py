@@ -1,14 +1,16 @@
 """Procesamiento de archivos PDF con texto embebido y escaneados."""
 import io
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
 from PIL import Image
 from loguru import logger
 
-from .ocr_engine import OCREngine
 from .image_extractor import ImageExtractor
+from .ocr_engine import OCREngine
 from .table_detector import TableDetector
+from .utils import count_pdf_pages
 
 
 class PDFProcessor:
@@ -45,16 +47,8 @@ class PDFProcessor:
         return self._process_scanned_pdf(pdf_path)
 
     def get_page_count(self, pdf_path: Path) -> int:
-        """Retorna el número de páginas del PDF."""
-        try:
-            import fitz
-
-            doc = fitz.open(str(pdf_path))
-            count = len(doc)
-            doc.close()
-            return count
-        except Exception:
-            return 0
+        """Retorna el número de páginas del PDF (0 si no puede abrirse)."""
+        return count_pdf_pages(pdf_path)
 
     # ------------------------------------------------------------------
     # Internos
@@ -114,15 +108,47 @@ class PDFProcessor:
             result.append(f"\n> ⚠️ Página {page_num + 1}: error parcial al extraer bloques.\n")
         return result
 
+    def _render_pages(
+        self, pdf_path: Path, dpi: int = 300
+    ) -> Iterator[tuple[int, Optional[Image.Image]]]:
+        """Rasteriza páginas con PyMuPDF, una por vez.
+
+        Generador para mantener memoria O(1): a 300 DPI una página A4 ocupa
+        ~25 MB descomprimida; materializar el documento completo (como hacía
+        pdf2image) agota la RAM en documentos largos. Tampoco requiere
+        Poppler ni ningún binario externo.
+
+        Una página que falla al rasterizar produce (page_num, None) para que
+        el caller registre el aviso sin perder el resto del documento.
+        """
+        import fitz
+
+        doc = fitz.open(str(pdf_path))
+        try:
+            for page_num in range(len(doc)):
+                try:
+                    pix = doc[page_num].get_pixmap(dpi=dpi, alpha=False)
+                    image: Optional[Image.Image] = Image.frombytes(
+                        "RGB", (pix.width, pix.height), pix.samples
+                    )
+                except Exception as exc:
+                    logger.warning(f"Página {page_num + 1}: fallo al rasterizar: {exc}")
+                    image = None
+                yield page_num, image
+        finally:
+            doc.close()
+
     def _process_scanned_pdf(self, pdf_path: Path) -> list[str]:
-        """Convierte páginas a imágenes con pdf2image y aplica OCR."""
+        """Rasteriza el PDF página a página y aplica OCR sobre cada imagen."""
         blocks: list[str] = []
         try:
-            from pdf2image import convert_from_path
-
-            images = convert_from_path(str(pdf_path), dpi=300)
-            for page_num, image in enumerate(images):
+            for page_num, image in self._render_pages(pdf_path):
                 blocks.append(f"\n## Página {page_num + 1}\n")
+                if image is None:
+                    blocks.append(
+                        f"\n> ⚠️ Página {page_num + 1}: no pudo rasterizarse. Contenido omitido.\n"
+                    )
+                    continue
                 try:
                     text = self.ocr_engine.extract_text(image, self.lang)
                     if text.strip():
@@ -139,5 +165,5 @@ class PDFProcessor:
                         f"\n> ⚠️ Página {page_num + 1}: no pudo procesarse (error OCR). Contenido omitido.\n"
                     )
         except Exception as exc:
-            logger.error(f"Error convirtiendo PDF escaneado {pdf_path.name}: {exc}")
+            logger.error(f"Error rasterizando PDF escaneado {pdf_path.name}: {exc}")
         return blocks

@@ -1,7 +1,6 @@
 """Tests para PDFProcessor."""
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 from src.pdf_processor import PDFProcessor
 from src.ocr_engine import OCREngine
@@ -22,7 +21,7 @@ def test_pdf_vacio_retorna_lista(mock_engine, tmp_path):
     assert result == []
 
 
-def test_pdf_escaneado_activa_ocr(mock_engine, tmp_path):
+def test_pdf_escaneado_activa_ocr(mock_engine):
     """Verifica que el motor OCR es el configurado."""
     processor = PDFProcessor(mock_engine)
     assert processor.ocr_engine is mock_engine
@@ -42,7 +41,6 @@ def test_pdf_con_texto_no_usa_ocr(mock_engine, tmp_path):
 
     mock_doc = MagicMock()
     mock_doc.__len__ = lambda self: 1
-    mock_doc.__iter__ = lambda self: iter([mock_page])
     mock_doc.__getitem__ = lambda self, i: mock_page
 
     with patch("fitz.open", return_value=mock_doc):
@@ -59,23 +57,50 @@ def test_get_page_count_retorna_cero_si_falla(mock_engine, tmp_path):
 
 
 def test_process_scanned_invoca_ocr(mock_engine, tmp_path):
-    """Un PDF sin texto embebido debe pasar por convert_from_path y OCR."""
-    from PIL import Image
-
+    """Un PDF escaneado rasteriza con PyMuPDF e invoca el motor OCR."""
     processor = PDFProcessor(mock_engine)
-    blank = Image.new("RGB", (100, 100))
+
+    mock_pix = MagicMock()
+    mock_pix.width = 4
+    mock_pix.height = 4
+    mock_pix.samples = b"\xff" * (4 * 4 * 3)
 
     mock_page = MagicMock()
-    mock_page.get_text.return_value = ""  # sin texto embebido
-    mock_page.get_images.return_value = []
+    mock_page.get_pixmap.return_value = mock_pix
 
     mock_doc = MagicMock()
     mock_doc.__len__ = lambda self: 1
-    mock_doc.__iter__ = lambda self: iter([mock_page])
     mock_doc.__getitem__ = lambda self, i: mock_page
 
     with patch("fitz.open", return_value=mock_doc):
-        with patch("pdf2image.convert_from_path", return_value=[blank]):
-            processor._process_scanned_pdf(tmp_path / "scan.pdf")
+        blocks = processor._process_scanned_pdf(tmp_path / "scan.pdf")
 
     mock_engine.extract_text.assert_called_once()
+    assert any("Página 1" in b for b in blocks)
+
+
+def test_render_pages_pagina_corrupta_no_aborta(mock_engine, tmp_path):
+    """Una página que falla al rasterizar produce None y el resto continúa."""
+    processor = PDFProcessor(mock_engine)
+
+    mock_pix = MagicMock()
+    mock_pix.width = 4
+    mock_pix.height = 4
+    mock_pix.samples = b"\xff" * (4 * 4 * 3)
+
+    ok_page = MagicMock()
+    ok_page.get_pixmap.return_value = mock_pix
+
+    bad_page = MagicMock()
+    bad_page.get_pixmap.side_effect = RuntimeError("página corrupta")
+
+    pages = [bad_page, ok_page]
+    mock_doc = MagicMock()
+    mock_doc.__len__ = lambda self: 2
+    mock_doc.__getitem__ = lambda self, i: pages[i]
+
+    with patch("fitz.open", return_value=mock_doc):
+        rendered = list(processor._render_pages(tmp_path / "scan.pdf"))
+
+    assert rendered[0][1] is None
+    assert rendered[1][1] is not None
