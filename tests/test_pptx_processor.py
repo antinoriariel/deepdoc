@@ -1,7 +1,6 @@
 """Tests para PPTXProcessor."""
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from src.pptx_processor import PPTXProcessor
 from src.ocr_engine import OCREngine
@@ -53,8 +52,11 @@ def test_tabla_pptx_a_markdown(mock_engine):
     """La tabla PPTX debe convertirse a formato Markdown correcto."""
     processor = PPTXProcessor(mock_engine)
 
-    mock_cell = lambda text: MagicMock(text=text)
-    mock_row = lambda *texts: MagicMock(cells=[mock_cell(t) for t in texts])
+    def mock_cell(text):
+        return MagicMock(text=text)
+
+    def mock_row(*texts):
+        return MagicMock(cells=[mock_cell(t) for t in texts])
 
     mock_table = MagicMock()
     mock_table.rows = [
@@ -66,7 +68,7 @@ def test_tabla_pptx_a_markdown(mock_engine):
     result = processor._table_to_markdown(mock_table)
     assert "| Nombre | Valor |" in result
     assert "| Alpha | 100 |" in result
-    assert "|---|---|" in result
+    assert "| --- | --- |" in result
 
 
 def test_get_slide_count_retorna_cero_si_falla(mock_engine, tmp_path):

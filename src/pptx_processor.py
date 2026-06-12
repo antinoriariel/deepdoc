@@ -8,6 +8,7 @@ from loguru import logger
 
 from .ocr_engine import OCREngine
 from .image_extractor import ImageExtractor
+from .utils import count_pptx_slides
 
 
 class PPTXProcessor:
@@ -38,13 +39,8 @@ class PPTXProcessor:
         return blocks
 
     def get_slide_count(self, pptx_path: Path) -> int:
-        """Retorna el número de diapositivas."""
-        try:
-            from pptx import Presentation
-
-            return len(Presentation(str(pptx_path)).slides)
-        except Exception:
-            return 0
+        """Retorna el número de diapositivas (0 si no puede abrirse)."""
+        return count_pptx_slides(pptx_path)
 
     # ------------------------------------------------------------------
     # Internos

@@ -1,4 +1,9 @@
-"""Wrapper sobre MarkItDown de Microsoft para conversión rápida a Markdown."""
+"""Wrapper sobre MarkItDown de Microsoft para conversión rápida a Markdown.
+
+Requiere `markitdown[pdf,pptx]`. No se usa el extra [all]: arrastra
+dependencias (youtube-transcript-api, onnxruntime antiguos) sin wheels
+para Python 3.13+.
+"""
 from pathlib import Path
 from typing import Optional
 

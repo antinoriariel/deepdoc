@@ -1,4 +1,10 @@
-"""DeepDoc — CLI para convertir PDF y PPTX a Markdown con OCR avanzado."""
+"""DeepDoc — CLI para convertir PDF y PPTX a Markdown con OCR avanzado.
+
+Pipeline híbrido: MarkItDown como intento rápido y, si el resultado es
+insuficiente, extracción nativa (PyMuPDF / python-pptx) con OCR de respaldo.
+El motor OCR se inicializa de forma diferida: si MarkItDown alcanza, nunca
+se paga el costo de cargar modelos de reconocimiento.
+"""
 import concurrent.futures
 from pathlib import Path
 from typing import Optional
@@ -21,10 +27,9 @@ def _process_file(
     lang: list[str],
     ocr_name: str,
     extract_images: bool,
-    verbose: bool,
     use_markitdown: bool,
 ) -> dict:
-    """Procesa un único archivo y retorna un dict con métricas."""
+    """Procesa un único archivo y retorna métricas del resultado."""
     from loguru import logger
 
     from src.image_extractor import ImageExtractor
@@ -33,7 +38,13 @@ def _process_file(
     from src.ocr_engine import get_engine
     from src.pdf_processor import PDFProcessor
     from src.pptx_processor import PPTXProcessor
-    from src.utils import detect_file_type, get_output_path
+    from src.utils import (
+        count_pdf_pages,
+        count_pptx_slides,
+        detect_file_type,
+        get_output_path,
+        sanitize_filename,
+    )
 
     result: dict = {
         "file": input_path.name,
@@ -46,52 +57,53 @@ def _process_file(
     try:
         output_path = get_output_path(input_path, output_dir)
         file_type = detect_file_type(input_path)
-        image_extractor = ImageExtractor(output_dir) if extract_images else None
-        ocr_engine = get_engine(ocr_name)
         formatter = MarkdownFormatter()
+        img_prefix = sanitize_filename(input_path.stem)
         markitdown_used = False
         blocks: list[str] = []
 
-        # Pipeline rápido: MarkItDown
+        # Etapa 1 — intento rápido con MarkItDown, sin tocar los motores OCR.
         if use_markitdown:
-            md_proc = MarkItDownProcessor()
-            quick = md_proc.convert(input_path)
+            try:
+                quick = MarkItDownProcessor().convert(input_path)
+            except ImportError as exc:
+                logger.warning(f"MarkItDown no disponible ({exc}); se usa el pipeline OCR")
+                quick = None
             if quick:
                 markitdown_used = True
                 result["engine"] = "markitdown"
                 blocks = [quick]
 
-        # Fallback: pipeline OCR
+        # Etapa 2 — pipeline completo; el motor OCR se construye solo aquí.
         if not blocks:
+            ocr_engine = get_engine(ocr_name)
+            image_extractor = (
+                ImageExtractor(output_dir, prefix=img_prefix) if extract_images else None
+            )
             if file_type == "pdf":
                 proc = PDFProcessor(ocr_engine, image_extractor, extract_images, lang)
-                blocks = proc.process(input_path)
-                result["pages"] = proc.get_page_count(input_path)
-                result["engine"] = ocr_name
-            elif file_type == "pptx":
+            else:
                 proc = PPTXProcessor(ocr_engine, image_extractor, extract_images, lang)
-                blocks = proc.process(input_path)
-                result["pages"] = proc.get_slide_count(input_path)
-                result["engine"] = ocr_name
+            blocks = proc.process(input_path)
+            result["engine"] = ocr_name
 
-        # Conteo de páginas cuando MarkItDown fue suficiente
-        if markitdown_used:
+        result["pages"] = (
+            count_pdf_pages(input_path) if file_type == "pdf" else count_pptx_slides(input_path)
+        )
+
+        # MarkItDown no referencia imágenes embebidas: extraerlas aparte si se pidieron.
+        if markitdown_used and extract_images:
+            extractor = ImageExtractor(output_dir, prefix=img_prefix)
             if file_type == "pdf":
-                try:
-                    import fitz
-
-                    doc = fitz.open(str(input_path))
-                    result["pages"] = len(doc)
-                    doc.close()
-                except Exception:
-                    pass
-            elif file_type == "pptx":
-                try:
-                    from pptx import Presentation
-
-                    result["pages"] = len(Presentation(str(input_path)).slides)
-                except Exception:
-                    pass
+                image_paths = extractor.extract_from_pdf(input_path)
+            else:
+                image_paths = [p for _, p in extractor.extract_from_pptx(input_path)]
+            if image_paths:
+                refs = "\n".join(
+                    f"![Figura {i}](images/{p.name})"
+                    for i, p in enumerate(image_paths, start=1)
+                )
+                blocks.append(f"\n## Imágenes extraídas\n\n{refs}\n")
 
         markdown = formatter.format(
             blocks,
@@ -108,9 +120,7 @@ def _process_file(
         logger.info(f"✓ {input_path.name} → {output_path.name}")
 
     except Exception as exc:
-        from loguru import logger as _log
-
-        _log.error(f"Error procesando {input_path.name}: {exc}")
+        logger.error(f"Error procesando {input_path.name}: {exc}")
         result["status"] = f"error: {exc}"
 
     return result
@@ -120,29 +130,24 @@ def _process_file(
 def main(
     input_path: Path = typer.Argument(..., help="Archivo PDF, PPTX o carpeta a procesar"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Carpeta de salida (default: output/)"),
-    lang: str = typer.Option("es,en", "--lang", "-l", help="Idiomas OCR separados por coma"),
+    lang: str = typer.Option("es,en", "--lang", "-l", help="Idiomas OCR separados por coma (ISO 639-1)"),
     ocr: str = typer.Option("tesseract", "--ocr", help="Motor OCR: paddle | surya | tesseract"),
-    extract_images: bool = typer.Option(False, "--extract-images", is_flag=True, help="Extraer imágenes embebidas"),
+    extract_images: bool = typer.Option(False, "--extract-images", help="Extraer imágenes embebidas"),
     workers: int = typer.Option(4, "--workers", "-w", help="Hilos paralelos para batch"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", is_flag=True, help="Output detallado"),
-    no_markitdown: bool = typer.Option(False, "--no-markitdown", is_flag=True, help="Saltar MarkItDown; ir directo a OCR"),
-    recursive: bool = typer.Option(False, "--recursive", "-r", is_flag=True, help="Buscar en subcarpetas"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Output detallado"),
+    no_markitdown: bool = typer.Option(False, "--no-markitdown", help="Saltar MarkItDown; ir directo a OCR"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Buscar en subcarpetas"),
 ) -> None:
     """DeepDoc: convierte PDF y PPTX a Markdown con OCR avanzado."""
-    from src.utils import setup_logging
+    from src.utils import collect_files, setup_logging
 
     setup_logging(verbose)
 
-    lang_list = [l.strip() for l in lang.split(",") if l.strip()]
+    lang_list = [item.strip() for item in lang.split(",") if item.strip()]
     use_markitdown = not no_markitdown
 
-    # Recopilar archivos
-    files: list[Path] = []
     if input_path.is_dir():
-        for ext in ("*.pdf", "*.pptx", "*.ppt"):
-            pattern = f"**/{ext}" if recursive else ext
-            files.extend(input_path.glob(pattern))
-        files = sorted(set(files))
+        files = collect_files(input_path, recursive)
     elif input_path.is_file():
         files = [input_path]
     else:
@@ -170,14 +175,16 @@ def main(
         if len(files) == 1 or workers == 1:
             for f in files:
                 progress.update(task_id, description=f"Procesando [cyan]{f.name}[/cyan]...")
-                res = _process_file(f, output_dir, lang_list, ocr, extract_images, verbose, use_markitdown)
-                results.append(res)
+                results.append(
+                    _process_file(f, output_dir, lang_list, ocr, extract_images, use_markitdown)
+                )
                 progress.advance(task_id)
         else:
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 future_map = {
                     executor.submit(
-                        _process_file, f, output_dir, lang_list, ocr, extract_images, verbose, use_markitdown
+                        _process_file, f, output_dir, lang_list, ocr,
+                        extract_images, use_markitdown,
                     ): f
                     for f in files
                 }
@@ -197,7 +204,11 @@ def main(
                     progress.update(task_id, description=f"Listo: [cyan]{f.name}[/cyan]")
                     progress.advance(task_id)
 
-    # Tabla resumen
+    _print_summary(results)
+
+
+def _print_summary(results: list[dict]) -> None:
+    """Imprime la tabla resumen de la corrida."""
     table = Table(title="[bold]DeepDoc — Resultado[/bold]")
     table.add_column("Archivo", style="cyan", no_wrap=True)
     table.add_column("Páginas", justify="right", style="blue")
@@ -206,7 +217,11 @@ def main(
     table.add_column("Salida", style="dim")
 
     for r in results:
-        status = f"[green]{r['status']}[/green]" if r["status"] == "ok" else f"[red]{r['status']}[/red]"
+        status = (
+            f"[green]{r['status']}[/green]"
+            if r["status"] == "ok"
+            else f"[red]{r['status']}[/red]"
+        )
         table.add_row(r["file"], str(r["pages"]), r["engine"], status, r.get("output") or "—")
 
     console.print()
