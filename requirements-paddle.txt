@@ -1,10 +1,13 @@
 # PaddleOCR — requiere Python >=3.8, <=3.11
-# En entornos con Python 3.12+ usar requirements-surya.txt o el engine tesseract.
+# (paddlepaddle no publica wheels para Python 3.12+)
+#
+# Se fija <3.0 en ambos: la API 3.x de paddleocr eliminó los parámetros
+# show_log / use_angle_cls que usa src/ocr_engine.py.
 #
 # Instalación:
 #   pip install -r requirements-paddle.txt
 #
 # En GPU (CUDA 11.x):
-#   pip install paddlepaddle-gpu>=2.6.0 paddleocr>=2.8.0
-paddlepaddle>=2.6.0
-paddleocr>=2.8.0
+#   pip install "paddlepaddle-gpu>=2.6.0,<3.0" "paddleocr>=2.8.0,<3.0"
+paddlepaddle>=2.6.0,<3.0
+paddleocr>=2.8.0,<3.0

@@ -1,40 +1,45 @@
-# Conversión rápida
-markitdown[all]>=0.1.0
+# ============================================================================
+# DeepDoc — dependencias núcleo (compatibles con Python 3.10 – 3.14)
+#
+# Motores OCR avanzados (opcionales, según versión de Python):
+#   requirements-paddle.txt  → PaddleOCR  (Python <= 3.11)
+#   requirements-surya.txt   → Surya OCR  (Python <= 3.12)
+#
+# Binarios del sistema:
+#   - Tesseract: necesario solo para documentos escaneados (OCR).
+#   - Java: opcional, solo para el fallback de tablas con Tabula.
+#   - NO se requiere Poppler ni Ghostscript (PyMuPDF rasteriza; Camelot >= 1.0
+#     usa pypdfium2).
+# ============================================================================
 
-# PDF
+# Conversión rápida — solo extras pdf/pptx: el extra [all] arrastra
+# youtube-transcript-api y onnxruntime<=1.20.1, sin wheels para Python 3.13+
+markitdown[pdf,pptx]>=0.1.6
+
+# PDF — PyMuPDF extrae texto embebido y también rasteriza páginas escaneadas
 pymupdf>=1.24.0
-pypdf>=4.0.0
-pdf2image>=1.17.0
 
 # PPTX
 python-pptx>=1.0.0
 
-# OCR — motor base (funciona en cualquier Python)
+# OCR base multiplataforma (el binario tesseract se instala aparte)
 pytesseract>=0.3.13
-
-# OCR avanzado — ver requirements-paddle.txt y requirements-surya.txt
-# PaddleOCR requiere Python <=3.11 y paddlepaddle (instalar por separado)
-# Surya OCR requiere Python <=3.12 (instalar por separado)
 
 # Imágenes
 pillow>=10.0.0
-opencv-python>=4.10.0
 numpy>=1.26.0
 
-# Tablas
-camelot-py[cv]>=0.11.0
+# Tablas — camelot>=1.0 ya no define el extra [cv] ni necesita Ghostscript
+camelot-py>=1.0.0
 tabula-py>=2.9.0
 pandas>=2.2.0
 
 # CLI y UX
 typer>=0.12.0
 rich>=13.7.0
-tqdm>=4.66.0
 loguru>=0.7.0
 
-# Tests
+# Tests y linting
 pytest>=8.0.0
 pytest-cov>=5.0.0
-
-# Linting
 ruff>=0.4.0
