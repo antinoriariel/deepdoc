@@ -49,7 +49,10 @@ Entrada → MarkItDown (intento rápido) → ¿OK? → Markdown
 ```bash
 python extract.py archivo.pdf --verbose
 python extract.py presentacion.pptx --extract-images
-python extract.py carpeta/ --workers 4 --ocr tesseract
+python extract.py carpeta/ --workers 4
+# Engine default: tesseract (funciona en cualquier Python)
+# Para PaddleOCR (requiere Python <=3.11): pip install -r requirements-paddle.txt
+# Para Surya     (requiere Python <=3.12): pip install -r requirements-surya.txt
 pytest tests/ -v --cov=src --cov-report=term-missing
 ruff check src/
 ```

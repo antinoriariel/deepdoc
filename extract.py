@@ -121,7 +121,7 @@ def main(
     input_path: Path = typer.Argument(..., help="Archivo PDF, PPTX o carpeta a procesar"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Carpeta de salida (default: output/)"),
     lang: str = typer.Option("es,en", "--lang", "-l", help="Idiomas OCR separados por coma"),
-    ocr: str = typer.Option("paddle", "--ocr", help="Motor OCR: paddle | surya | tesseract"),
+    ocr: str = typer.Option("tesseract", "--ocr", help="Motor OCR: paddle | surya | tesseract"),
     extract_images: bool = typer.Option(False, "--extract-images", is_flag=True, help="Extraer imágenes embebidas"),
     workers: int = typer.Option(4, "--workers", "-w", help="Hilos paralelos para batch"),
     verbose: bool = typer.Option(False, "--verbose", "-v", is_flag=True, help="Output detallado"),
